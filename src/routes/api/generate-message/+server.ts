@@ -490,6 +490,9 @@ ${attachedRules.map((r) => `- ${r.name}: ${r.rule}`).join('\n')}`,
 		const baseURL = PROVIDER_BASE_URLS[provider] || PROVIDER_BASE_URLS[Provider.OpenRouter];
 		const openai = new OpenAI({ baseURL, apiKey: actualKey });
 
+		const supportsReasoningEffort =
+			provider === Provider.OpenRouter || provider === Provider.OpenAI;
+
 		streamResult = await ResultAsync.fromPromise(
 			openai.chat.completions.create(
 				{
@@ -497,7 +500,7 @@ ${attachedRules.map((r) => `- ${r.name}: ${r.rule}`).join('\n')}`,
 					messages: messagesToSend,
 					temperature: 0.7,
 					stream: true,
-					reasoning_effort: reasoningEffort,
+					...(supportsReasoningEffort && reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
 				},
 				{ signal: abortSignal }
 			),
