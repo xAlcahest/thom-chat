@@ -233,6 +233,12 @@
 		return m ? supportsReasoning(m) : false;
 	});
 
+	const isOpusModel = $derived(settings.modelId?.toLowerCase().includes('opus') ?? false);
+	const isOpus47 = $derived(
+		settings.modelId === 'claude-opus-4-7' ||
+			settings.modelId?.includes('claude-opus-4-7') === true
+	);
+
 	const fileUpload = new FileUpload({
 		multiple: true,
 		accept: 'image/*',
@@ -727,6 +733,18 @@
 													</span>
 												</DropdownMenu.Trigger>
 												<DropdownMenu.Content align="start">
+													{#if isOpusModel}
+														<DropdownMenu.Item onSelect={() => (settings.reasoningEffort = 'max')}>
+															<BrainIcon class="size-4" />
+															Max
+														</DropdownMenu.Item>
+													{/if}
+													{#if isOpus47}
+														<DropdownMenu.Item onSelect={() => (settings.reasoningEffort = 'xhigh')}>
+															<BrainIcon class="size-4" />
+															xHigh
+														</DropdownMenu.Item>
+													{/if}
 													<DropdownMenu.Item onSelect={() => (settings.reasoningEffort = 'high')}>
 														<BrainIcon class="size-4" />
 														High

@@ -46,7 +46,7 @@ const reqBodySchema = z
 				})
 			)
 			.optional(),
-		reasoning_effort: z.enum(['low', 'medium', 'high']).optional(),
+		reasoning_effort: z.enum(['low', 'medium', 'high', 'max', 'xhigh']).optional(),
 	})
 	.refine(
 		(data) => {
@@ -208,7 +208,7 @@ async function generateAIResponse({
 	rulesResultPromise: ResultAsync<Doc<'user_rules'>[], string>;
 	userSettingsPromise: ResultAsync<Doc<'user_settings'> | null, string>;
 	abortSignal?: AbortSignal;
-	reasoningEffort?: 'low' | 'medium' | 'high';
+	reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh';
 }) {
 	log('Starting AI response generation in background', startTime);
 

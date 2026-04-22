@@ -11,7 +11,9 @@ export const messageRoleValidator = v.union(
 export const reasoningEffortValidator = v.union(
 	v.literal('low'),
 	v.literal('medium'),
-	v.literal('high')
+	v.literal('high'),
+	v.literal('max'),
+	v.literal('xhigh')
 );
 
 export type MessageRole = Infer<typeof messageRoleValidator>;
