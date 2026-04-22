@@ -5,6 +5,11 @@ export const Provider = {
 	HuggingFace: 'huggingface',
 	OpenAI: 'openai',
 	Anthropic: 'anthropic',
+	Google: 'google',
+	Perplexity: 'perplexity',
+	xAI: 'xai',
+	DeepSeek: 'deepseek',
+	Mistral: 'mistral',
 } as const;
 
 export type Provider = (typeof Provider)[keyof typeof Provider];

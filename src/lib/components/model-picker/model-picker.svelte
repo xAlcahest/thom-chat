@@ -198,8 +198,9 @@
 		};
 	}
 
-	function modelSelected(modelId: string) {
+	function modelSelected(modelId: string, modelProvider?: string) {
 		settings.modelId = modelId;
+		if (modelProvider) settings.provider = modelProvider;
 		open = false;
 	}
 
@@ -325,11 +326,11 @@
 					{#if view === 'favorites' && pinnedModels.length > 0}
 						{#each pinnedModels as model (model._id)}
 							{@const formatted = formatModelName(model.model_id)}
-							{@const openRouterModel = modelsState
-								.from(Provider.OpenRouter)
-								.find((m) => m.id === model.model_id)}
+							{@const providerModel = modelsState
+								.from(model.provider as Provider)
+								.find((m: any) => m.id === model.model_id)}
 							{@const disabled =
-								onlyImageModels && openRouterModel && !supportsImages(openRouterModel)}
+								onlyImageModels && providerModel && !supportsImages(providerModel)}
 
 							<Command.Item
 								value={model.model_id}
@@ -340,7 +341,7 @@
 									'h-10 items-center justify-between',
 									disabled && 'opacity-50'
 								)}
-								onSelect={() => modelSelected(model.model_id)}
+								onSelect={() => modelSelected(model.model_id, model.provider)}
 							>
 								<div class={cn('flex items-center gap-2')}>
 									{#if getModelIcon(model.model_id)}
@@ -354,7 +355,7 @@
 								</div>
 
 								<div class="flex place-items-center gap-1">
-									{#if openRouterModel && supportsImages(openRouterModel)}
+									{#if providerModel && supportsImages(providerModel)}
 										<Tooltip>
 											{#snippet trigger(tooltip)}
 												<div
@@ -368,7 +369,7 @@
 										</Tooltip>
 									{/if}
 
-									{#if openRouterModel && supportsReasoning(openRouterModel)}
+									{#if providerModel && supportsReasoning(providerModel)}
 										<Tooltip>
 											{#snippet trigger(tooltip)}
 												<div
@@ -458,10 +459,10 @@
 
 {#snippet modelCard(model: (typeof enabledArr)[number])}
 	{@const formatted = formatModelName(model.model_id)}
-	{@const openRouterModel = modelsState
-		.from(Provider.OpenRouter)
-		.find((m) => m.id === model.model_id)}
-	{@const disabled = onlyImageModels && openRouterModel && !supportsImages(openRouterModel)}
+	{@const providerModel = modelsState
+		.from(model.provider as Provider)
+		.find((m: any) => m.id === model.model_id)}
+	{@const disabled = onlyImageModels && providerModel && !supportsImages(providerModel)}
 
 	<Command.Item
 		value={model.model_id}
@@ -472,7 +473,7 @@
 			'h-36 w-32 flex-col items-center justify-center',
 			disabled && 'opacity-50'
 		)}
-		onSelect={() => modelSelected(model.model_id)}
+		onSelect={() => modelSelected(model.model_id, model.provider)}
 	>
 		<div class={cn('flex flex-col items-center')}>
 			{#if getModelIcon(model.model_id)}
@@ -494,7 +495,7 @@
 		</div>
 
 		<div class="flex place-items-center gap-1">
-			{#if openRouterModel && supportsImages(openRouterModel)}
+			{#if providerModel && supportsImages(providerModel)}
 				<Tooltip>
 					{#snippet trigger(tooltip)}
 						<div
@@ -508,7 +509,7 @@
 				</Tooltip>
 			{/if}
 
-			{#if openRouterModel && supportsReasoning(openRouterModel)}
+			{#if providerModel && supportsReasoning(providerModel)}
 				<Tooltip>
 					{#snippet trigger(tooltip)}
 						<div

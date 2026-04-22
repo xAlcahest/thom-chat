@@ -1,13 +1,22 @@
+import type { DirectModel } from '$lib/backend/models/direct';
 import type { OpenRouterModel } from '$lib/backend/models/open-router';
 
-export function supportsImages(model: OpenRouterModel): boolean {
+type AnyModel = OpenRouterModel | DirectModel;
+
+function isDirectModel(model: AnyModel): model is DirectModel {
+	return 'supports_images' in model;
+}
+
+export function supportsImages(model: AnyModel): boolean {
+	if (isDirectModel(model)) return model.supports_images;
 	return model.architecture.input_modalities.includes('image');
 }
 
-export function supportsReasoning(model: OpenRouterModel): boolean {
+export function supportsReasoning(model: AnyModel): boolean {
+	if (isDirectModel(model)) return model.supports_reasoning;
 	return model.supported_parameters.includes('reasoning');
 }
 
-export function getImageSupportedModels(models: OpenRouterModel[]): OpenRouterModel[] {
+export function getImageSupportedModels<T extends AnyModel>(models: T[]): T[] {
 	return models.filter(supportsImages);
 }

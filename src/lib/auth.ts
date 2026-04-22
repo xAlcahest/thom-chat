@@ -8,19 +8,29 @@ import { env as privateEnv } from '$env/dynamic/private';
 
 const client = new ConvexHttpClient(env.PUBLIC_CONVEX_URL!);
 
+const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
+
+if (privateEnv.GOOGLE_CLIENT_ID && privateEnv.GOOGLE_CLIENT_SECRET) {
+	socialProviders.google = {
+		clientId: privateEnv.GOOGLE_CLIENT_ID,
+		clientSecret: privateEnv.GOOGLE_CLIENT_SECRET,
+	};
+}
+
+if (privateEnv.GITHUB_CLIENT_ID && privateEnv.GITHUB_CLIENT_SECRET) {
+	socialProviders.github = {
+		clientId: privateEnv.GITHUB_CLIENT_ID,
+		clientSecret: privateEnv.GITHUB_CLIENT_SECRET,
+	};
+}
+
 export const auth = betterAuth({
 	secret: privateEnv.BETTER_AUTH_SECRET!,
 	database: convexAdapter(client),
-	socialProviders: {
-		google: {
-			clientId: privateEnv.GOOGLE_CLIENT_ID!,
-			clientSecret: privateEnv.GOOGLE_CLIENT_SECRET!,
-		},
-		github: {
-			clientId: privateEnv.GITHUB_CLIENT_ID!,
-			clientSecret: privateEnv.GITHUB_CLIENT_SECRET!,
-		},
+	emailAndPassword: {
+		enabled: true,
 	},
+	socialProviders,
 	databaseHooks: {
 		user: {
 			create: {

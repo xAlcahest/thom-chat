@@ -82,6 +82,7 @@
 				session_token: session.current?.session.token ?? '',
 				conversation_id: cid,
 				model_id: settings.modelId,
+				provider: settings.provider,
 				images: message.images,
 				web_search_enabled: message.web_search_enabled,
 			});

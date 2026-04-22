@@ -9,22 +9,16 @@
 	import { getFirstSentence } from '$lib/utils/strings';
 	import { supportsImages, supportsReasoning } from '$lib/utils/model-capabilities';
 	import type { OpenRouterModel } from '$lib/backend/models/open-router';
+	import type { DirectModel } from '$lib/backend/models/direct';
 	import Tooltip from '$lib/components/ui/tooltip.svelte';
 	import EyeIcon from '~icons/lucide/eye';
 	import BrainIcon from '~icons/lucide/brain';
 
-	type Model = {
-		id: string;
-		name: string;
-		description: string;
-	};
-
 	type Props = {
 		enabled?: boolean;
 		disabled?: boolean;
-	} & {
-		provider: typeof Provider.OpenRouter;
-		model: OpenRouterModel;
+		provider: Provider;
+		model: OpenRouterModel | DirectModel;
 	};
 
 	let { provider, model, enabled = false, disabled = false }: Props = $props();
@@ -36,7 +30,7 @@
 	let showMore = $state(false);
 
 	async function toggleEnabled(v: boolean) {
-		enabled = v; // Optimistic!
+		enabled = v;
 		if (!session.current?.user.id) return;
 
 		const res = await ResultAsync.fromPromise(
@@ -49,7 +43,7 @@
 			(e) => e
 		);
 
-		if (res.isErr()) enabled = !v; // Should have been a realist :(
+		if (res.isErr()) enabled = !v;
 	}
 </script>
 
@@ -78,7 +72,7 @@
 	</Card.Header>
 	<Card.Content>
 		<div class="flex place-items-center gap-1">
-			{#if model && provider === 'openrouter' && supportsImages(model)}
+			{#if supportsImages(model)}
 				<Tooltip>
 					{#snippet trigger(tooltip)}
 						<div
@@ -92,7 +86,7 @@
 				</Tooltip>
 			{/if}
 
-			{#if model && provider === 'openrouter' && supportsReasoning(model)}
+			{#if supportsReasoning(model)}
 				<Tooltip>
 					{#snippet trigger(tooltip)}
 						<div

@@ -128,6 +128,7 @@
 				session_token: session.current?.session.token,
 				conversation_id: page.params.id ?? undefined,
 				model_id: settings.modelId,
+				provider: settings.provider,
 				images: imagesCopy.length > 0 ? imagesCopy : undefined,
 				web_search_enabled: settings.webSearchEnabled,
 				reasoning_effort: currentModelSupportsReasoning ? settings.reasoningEffort : undefined,
@@ -211,19 +212,25 @@
 
 	models.init();
 
+	function findCurrentModel() {
+		if (!settings.modelId) return null;
+		const provider = (settings.provider || Provider.OpenRouter) as Provider;
+		try {
+			const providerModels = models.from(provider);
+			return providerModels.find((m: any) => m.id === settings.modelId) ?? null;
+		} catch {
+			return null;
+		}
+	}
+
 	const currentModelSupportsImages = $derived.by(() => {
-		if (!settings.modelId) return false;
-		const openRouterModels = models.from(Provider.OpenRouter);
-		const currentModel = openRouterModels.find((m) => m.id === settings.modelId);
-		return currentModel ? supportsImages(currentModel) : false;
+		const m = findCurrentModel();
+		return m ? supportsImages(m) : false;
 	});
 
 	const currentModelSupportsReasoning = $derived.by(() => {
-		if (!settings.modelId) return false;
-		const openRouterModels = models.from(Provider.OpenRouter);
-		const currentModel = openRouterModels.find((m) => m.id === settings.modelId);
-		if (!currentModel) return false;
-		return supportsReasoning(currentModel);
+		const m = findCurrentModel();
+		return m ? supportsReasoning(m) : false;
 	});
 
 	const fileUpload = new FileUpload({

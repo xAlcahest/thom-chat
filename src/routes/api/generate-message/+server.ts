@@ -13,6 +13,17 @@ import { generationAbortControllers } from './cache.js';
 import { md } from '$lib/utils/markdown-it.js';
 import * as array from '$lib/utils/array';
 import { parseMessageForRules } from '$lib/utils/rules.js';
+import { streamAnthropic } from '$lib/backend/models/anthropic-stream.js';
+
+const PROVIDER_BASE_URLS: Record<string, string> = {
+	[Provider.OpenRouter]: 'https://openrouter.ai/api/v1',
+	[Provider.OpenAI]: 'https://api.openai.com/v1',
+	[Provider.Google]: 'https://generativelanguage.googleapis.com/v1beta/openai',
+	[Provider.Perplexity]: 'https://api.perplexity.ai',
+	[Provider.xAI]: 'https://api.x.ai/v1',
+	[Provider.DeepSeek]: 'https://api.deepseek.com',
+	[Provider.Mistral]: 'https://api.mistral.ai/v1',
+};
 
 // Set to true to enable debug logging
 const ENABLE_LOGGING = true;
@@ -21,6 +32,7 @@ const reqBodySchema = z
 	.object({
 		message: z.string().optional(),
 		model_id: z.string(),
+		provider: z.string().optional().default('openrouter'),
 
 		session_token: z.string(),
 		conversation_id: z.string().optional(),
@@ -179,6 +191,7 @@ async function generateAIResponse({
 	conversationId,
 	sessionToken,
 	startTime,
+	provider,
 	modelResultPromise,
 	keyResultPromise,
 	rulesResultPromise,
@@ -189,6 +202,7 @@ async function generateAIResponse({
 	conversationId: string;
 	sessionToken: string;
 	startTime: number;
+	provider: Provider;
 	keyResultPromise: ResultAsync<string | null, string>;
 	modelResultPromise: ResultAsync<Doc<'user_enabled_models'> | null, string>;
 	rulesResultPromise: ResultAsync<Doc<'user_rules'>[], string>;
@@ -261,14 +275,14 @@ async function generateAIResponse({
 	const lastUserMessage = messages.filter((m) => m.role === 'user').pop();
 	const webSearchEnabled = lastUserMessage?.web_search_enabled ?? false;
 
-	const modelId = webSearchEnabled ? `${model.model_id}:online` : model.model_id;
+	const modelId = webSearchEnabled && provider === Provider.OpenRouter ? `${model.model_id}:online` : model.model_id;
 
 	// Create assistant message
 	const messageCreationResult = await ResultAsync.fromPromise(
 		client.mutation(api.messages.create, {
 			conversation_id: conversationId,
 			model_id: model.model_id,
-			provider: Provider.OpenRouter,
+			provider,
 			content: '',
 			role: 'assistant',
 			session_token: sessionToken,
@@ -318,15 +332,12 @@ async function generateAIResponse({
 	let actualKey: string;
 
 	if (userKey) {
-		// User has their own API key
 		actualKey = userKey;
 		log('Background: Using user API key', startTime);
-	} else {
-		// User doesn't have API key, check if using a free model
+	} else if (provider === Provider.OpenRouter) {
 		const isFreeModel = model.model_id.endsWith(':free');
 
 		if (!isFreeModel) {
-			// For non-free models, check the 10 message limit
 			const freeMessagesUsed = userSettings?.free_messages_used || 0;
 
 			if (freeMessagesUsed >= 10) {
@@ -341,7 +352,6 @@ async function generateAIResponse({
 				return;
 			}
 
-			// Increment free message count before generating (only for non-free models)
 			const incrementResult = await ResultAsync.fromPromise(
 				client.mutation(api.user_settings.incrementFreeMessageCount, {
 					session_token: sessionToken,
@@ -365,8 +375,16 @@ async function generateAIResponse({
 			log(`Background: Using free model (${model.model_id}) - no message count`, startTime);
 		}
 
-		// Use environment OpenRouter key
 		actualKey = OPENROUTER_FREE_KEY;
+	} else {
+		handleGenerationError({
+			error: `No API key configured for ${provider}. Add your key in Account > API Keys.`,
+			conversationId,
+			messageId: mid,
+			sessionToken,
+			startTime,
+		});
+		return;
 	}
 
 	if (rulesResult.isErr()) {
@@ -412,11 +430,6 @@ async function generateAIResponse({
 
 	log(`Background: ${attachedRules.length} rules attached`, startTime);
 
-	const openai = new OpenAI({
-		baseURL: 'https://openrouter.ai/api/v1',
-		apiKey: actualKey,
-	});
-
 	const formattedMessages = messages.map((m) => {
 		if (m.images && m.images.length > 0 && m.role === 'user') {
 			return {
@@ -461,21 +474,36 @@ ${attachedRules.map((r) => `- ${r.name}: ${r.rule}`).join('\n')}`,
 		return;
 	}
 
-	const streamResult = await ResultAsync.fromPromise(
-		openai.chat.completions.create(
-			{
-				model: modelId,
-				messages: messagesToSend,
-				temperature: 0.7,
-				stream: true,
-				reasoning_effort: reasoningEffort,
-			},
-			{
-				signal: abortSignal,
-			}
-		),
-		(e) => `OpenAI API call failed: ${e}`
-	);
+	let streamResult: Awaited<ReturnType<typeof ResultAsync.fromPromise<AsyncIterable<any>, string>>>;
+
+	if (provider === Provider.Anthropic) {
+		streamResult = await ResultAsync.fromPromise(
+			Promise.resolve(
+				streamAnthropic(actualKey, modelId, messagesToSend as any, {
+					temperature: 0.7,
+					signal: abortSignal,
+				})
+			),
+			(e) => `Anthropic API call failed: ${e}`
+		);
+	} else {
+		const baseURL = PROVIDER_BASE_URLS[provider] || PROVIDER_BASE_URLS[Provider.OpenRouter];
+		const openai = new OpenAI({ baseURL, apiKey: actualKey });
+
+		streamResult = await ResultAsync.fromPromise(
+			openai.chat.completions.create(
+				{
+					model: modelId,
+					messages: messagesToSend,
+					temperature: 0.7,
+					stream: true,
+					reasoning_effort: reasoningEffort,
+				},
+				{ signal: abortSignal }
+			),
+			(e) => `API call failed: ${e}`
+		);
+	}
 
 	if (streamResult.isErr()) {
 		handleGenerationError({
@@ -494,7 +522,7 @@ ${attachedRules.map((r) => `- ${r.name}: ${r.rule}`).join('\n')}`,
 	let content = '';
 	let reasoning = '';
 	let chunkCount = 0;
-	let generationId: string | null = null;
+	let generationId: string | undefined = undefined;
 	const annotations: Annotation[] = [];
 
 	try {
@@ -506,10 +534,8 @@ ${attachedRules.map((r) => `- ${r.name}: ${r.rule}`).join('\n')}`,
 
 			chunkCount++;
 
-			// @ts-expect-error you're wrong
 			reasoning += chunk.choices[0]?.delta?.reasoning || '';
 			content += chunk.choices[0]?.delta?.content || '';
-			// @ts-expect-error you're wrong
 			annotations.push(...(chunk.choices[0]?.delta?.annotations ?? []));
 
 			if (!content && !reasoning) continue;
@@ -552,25 +578,31 @@ ${attachedRules.map((r) => `- ${r.name}: ${r.rule}`).join('\n')}`,
 			(e) => `Failed to render HTML: ${e}`
 		);
 
-		const generationStatsResult = await retryResult(
-			() => getGenerationStats(generationId!, actualKey),
-			{
-				delay: 500,
-				retries: 2,
-				startTime,
-				fnName: 'getGenerationStats',
-			}
-		);
-
-		if (generationStatsResult.isErr()) {
-			log(`Background: Failed to get generation stats: ${generationStatsResult.error}`, startTime);
-		}
-
-		// just default so we don't blow up
-		const generationStats = generationStatsResult.unwrapOr({
+		let generationStats: { tokens_completion?: number; total_cost?: number } = {
 			tokens_completion: undefined,
 			total_cost: undefined,
-		});
+		};
+
+		if (provider === Provider.OpenRouter && generationId) {
+			const generationStatsResult = await retryResult(
+				() => getGenerationStats(generationId!, actualKey),
+				{
+					delay: 500,
+					retries: 2,
+					startTime,
+					fnName: 'getGenerationStats',
+				}
+			);
+
+			if (generationStatsResult.isErr()) {
+				log(
+					`Background: Failed to get generation stats: ${generationStatsResult.error}`,
+					startTime
+				);
+			}
+
+			generationStats = generationStatsResult.unwrapOr(generationStats);
+		}
 
 		log('Background: Got generation stats', startTime);
 
@@ -679,9 +711,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		return error(401, 'Unauthorized');
 	}
 
+	const provider = (args.provider || Provider.OpenRouter) as Provider;
+
 	const modelResultPromise = ResultAsync.fromPromise(
 		client.query(api.user_enabled_models.get, {
-			provider: Provider.OpenRouter,
+			provider,
 			model_id: args.model_id,
 			session_token: sessionToken,
 		}),
@@ -690,7 +724,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	const keyResultPromise = ResultAsync.fromPromise(
 		client.query(api.user_keys.get, {
-			provider: Provider.OpenRouter,
+			provider,
 			session_token: sessionToken,
 		}),
 		(e) => `Failed to get API key: ${e}`
@@ -800,6 +834,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		conversationId,
 		sessionToken,
 		startTime,
+		provider,
 		modelResultPromise,
 		keyResultPromise,
 		rulesResultPromise,

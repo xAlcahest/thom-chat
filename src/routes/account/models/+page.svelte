@@ -6,6 +6,7 @@
 	import { models } from '$lib/state/models.svelte';
 	import { session } from '$lib/state/session.svelte';
 	import { Provider } from '$lib/types.js';
+	import { DIRECT_PROVIDERS } from '$lib/backend/models/direct';
 	import { fuzzysearch } from '$lib/utils/fuzzy-search';
 	import { cn } from '$lib/utils/utils';
 	import { Toggle } from 'melt/builders';
@@ -14,72 +15,92 @@
 	import ModelCard from './model-card.svelte';
 	import { supportsImages, supportsReasoning } from '$lib/utils/model-capabilities';
 
-	const openRouterKeyQuery = useCachedQuery(api.user_keys.get, {
-		provider: Provider.OpenRouter,
-		session_token: session.current?.session.token ?? '',
-	});
+	const providerLabels: Record<string, { title: string; description: string }> = {
+		[Provider.OpenRouter]: { title: 'OpenRouter', description: 'Easy access to over 400 models.' },
+		[Provider.OpenAI]: { title: 'OpenAI', description: 'GPT-4.1, o3, o4-mini and more.' },
+		[Provider.Anthropic]: {
+			title: 'Anthropic',
+			description: 'Claude Opus 4, Sonnet 4, Haiku 3.5.',
+		},
+		[Provider.Google]: {
+			title: 'Google AI',
+			description: 'Gemini 2.5 Pro, Flash and more.',
+		},
+		[Provider.Perplexity]: {
+			title: 'Perplexity',
+			description: 'Sonar models with built-in web search.',
+		},
+		[Provider.xAI]: { title: 'xAI', description: 'Grok 3 and Grok 3 Mini.' },
+		[Provider.DeepSeek]: { title: 'DeepSeek', description: 'DeepSeek V3 and R1.' },
+		[Provider.Mistral]: { title: 'Mistral', description: 'Mistral Large, Small, and Codestral.' },
+	};
 
-	const hasOpenRouterKey = $derived(
-		openRouterKeyQuery.data !== undefined && openRouterKeyQuery.data !== ''
+	const allDisplayProviders = [Provider.OpenRouter, ...DIRECT_PROVIDERS];
+
+	const keyQueries = Object.fromEntries(
+		allDisplayProviders.map((p) => [
+			p,
+			useCachedQuery(api.user_keys.get, {
+				provider: p,
+				session_token: session.current?.session.token ?? '',
+			}),
+		])
 	);
+
+	function hasKey(provider: string): boolean {
+		const q = keyQueries[provider];
+		return q?.data !== undefined && q?.data !== '';
+	}
 
 	let search = $state('');
 
-	const openRouterToggle = new Toggle({
-		value: true,
-		// TODO: enable this if and when when we use multiple providers
-		disabled: true,
-	});
-
-	const freeModelsToggle = new Toggle({
-		value: false,
-	});
-
-	const reasoningModelsToggle = new Toggle({
-		value: false,
-	});
-
-	const imageModelsToggle = new Toggle({
-		value: false,
-	});
+	const reasoningModelsToggle = new Toggle({ value: false });
+	const imageModelsToggle = new Toggle({ value: false });
 
 	let initiallyEnabled = $state<string[]>([]);
 	$effect(() => {
 		if (Object.keys(models.enabled).length && initiallyEnabled.length === 0) {
-			initiallyEnabled = models
-				.from(Provider.OpenRouter)
-				.filter((m) => m.enabled)
-				.map((m) => m.id);
+			const enabled: string[] = [];
+			for (const p of allDisplayProviders) {
+				try {
+					enabled.push(
+						...models
+							.from(p)
+							.filter((m: any) => m.enabled)
+							.map((m: any) => m.id)
+					);
+				} catch {
+					// provider may not have models loaded
+				}
+			}
+			initiallyEnabled = enabled;
 		}
 	});
 
-	const openRouterModels = $derived(
-		fuzzysearch({
-			haystack: models.from(Provider.OpenRouter).filter((m) => {
-				if (freeModelsToggle.value) {
-					if (m.pricing.prompt !== '0') return false;
-				}
-
-				if (reasoningModelsToggle.value) {
-					if (!supportsReasoning(m)) return false;
-				}
-
-				if (imageModelsToggle.value) {
-					if (!supportsImages(m)) return false;
-				}
-
+	function getProviderModels(provider: string) {
+		try {
+			const allModels = models.from(provider as Provider);
+			const filtered = allModels.filter((m: any) => {
+				if (reasoningModelsToggle.value && !supportsReasoning(m)) return false;
+				if (imageModelsToggle.value && !supportsImages(m)) return false;
 				return true;
-			}),
-			needle: search,
-			property: 'name',
-		}).sort((a, b) => {
-			const aEnabled = initiallyEnabled.includes(a.id);
-			const bEnabled = initiallyEnabled.includes(b.id);
-			if (aEnabled && !bEnabled) return -1;
-			if (!aEnabled && bEnabled) return 1;
-			return 0;
-		})
-	);
+			});
+
+			return fuzzysearch({
+				haystack: filtered,
+				needle: search,
+				property: 'name' in filtered[0]! ? 'name' : 'id',
+			}).sort((a: any, b: any) => {
+				const aEnabled = initiallyEnabled.includes(a.id);
+				const bEnabled = initiallyEnabled.includes(b.id);
+				if (aEnabled && !bEnabled) return -1;
+				if (!aEnabled && bEnabled) return 1;
+				return 0;
+			});
+		} catch {
+			return [];
+		}
+	}
 </script>
 
 <svelte:head>
@@ -95,27 +116,9 @@
 	<Search bind:value={search} placeholder="Search models" />
 	<div class="flex place-items-center gap-2">
 		<button
-			{...openRouterToggle.trigger}
-			aria-label="OpenRouter"
-			class="group text-primary-foreground bg-primary aria-[pressed=false]:border-border border-primary aria-[pressed=false]:bg-background flex place-items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all disabled:cursor-not-allowed disabled:opacity-50"
-		>
-			OpenRouter
-			<XIcon class="inline size-3 group-aria-[pressed=false]:hidden" />
-			<PlusIcon class="inline size-3 group-aria-[pressed=true]:hidden" />
-		</button>
-		<button
-			{...freeModelsToggle.trigger}
-			aria-label="Free Models"
-			class="group text-primary-foreground bg-primary aria-[pressed=false]:border-border border-primary aria-[pressed=false]:bg-background flex place-items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all disabled:cursor-not-allowed disabled:opacity-50"
-		>
-			Free
-			<XIcon class="inline size-3 group-aria-[pressed=false]:hidden" />
-			<PlusIcon class="inline size-3 group-aria-[pressed=true]:hidden" />
-		</button>
-		<button
 			{...reasoningModelsToggle.trigger}
 			aria-label="Reasoning Models"
-			class="group text-primary-foreground bg-primary aria-[pressed=false]:border-border border-primary aria-[pressed=false]:bg-background flex place-items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all disabled:cursor-not-allowed disabled:opacity-50"
+			class="group text-primary-foreground bg-primary aria-[pressed=false]:border-border border-primary aria-[pressed=false]:bg-background flex place-items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all"
 		>
 			Reasoning
 			<XIcon class="inline size-3 group-aria-[pressed=false]:hidden" />
@@ -124,7 +127,7 @@
 		<button
 			{...imageModelsToggle.trigger}
 			aria-label="Image Models"
-			class="group text-primary-foreground bg-primary aria-[pressed=false]:border-border border-primary aria-[pressed=false]:bg-background flex place-items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all disabled:cursor-not-allowed disabled:opacity-50"
+			class="group text-primary-foreground bg-primary aria-[pressed=false]:border-border border-primary aria-[pressed=false]:bg-background flex place-items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all"
 		>
 			Images
 			<XIcon class="inline size-3 group-aria-[pressed=false]:hidden" />
@@ -133,34 +136,40 @@
 	</div>
 </div>
 
-{#if openRouterModels.length > 0}
-	<div class="mt-4 flex flex-col gap-4">
-		<div>
-			<h3 class="text-lg font-bold">OpenRouter</h3>
-			<p class="text-muted-foreground text-sm">Easy access to over 400 models.</p>
-		</div>
-		<div class="relative">
-			<div
-				class={cn('flex flex-col gap-4 overflow-hidden', {
-					'pointer-events-none max-h-96 mask-b-from-0% mask-b-to-80%': !hasOpenRouterKey,
-				})}
-			>
-				{#each openRouterModels as model (model.id)}
-					<ModelCard
-						provider={Provider.OpenRouter}
-						{model}
-						enabled={model.enabled}
-						disabled={!hasOpenRouterKey}
-					/>
-				{/each}
+{#each allDisplayProviders as provider (provider)}
+	{@const providerModels = getProviderModels(provider)}
+	{@const label = providerLabels[provider]}
+	{@const providerHasKey = hasKey(provider)}
+
+	{#if providerModels.length > 0 && label}
+		<div class="mt-4 flex flex-col gap-4">
+			<div>
+				<h3 class="text-lg font-bold">{label.title}</h3>
+				<p class="text-muted-foreground text-sm">{label.description}</p>
 			</div>
-			{#if !hasOpenRouterKey}
+			<div class="relative">
 				<div
-					class="absolute bottom-10 left-0 z-10 flex w-full place-items-center justify-center gap-2"
+					class={cn('flex flex-col gap-4 overflow-hidden', {
+						'pointer-events-none max-h-96 mask-b-from-0% mask-b-to-80%': !providerHasKey,
+					})}
 				>
-					<Button href="/account/api-keys#openrouter" class="w-fit">Add API Key</Button>
+					{#each providerModels as model (model.id)}
+						<ModelCard
+							{provider}
+							{model}
+							enabled={model.enabled}
+							disabled={!providerHasKey}
+						/>
+					{/each}
 				</div>
-			{/if}
+				{#if !providerHasKey}
+					<div
+						class="absolute bottom-10 left-0 z-10 flex w-full place-items-center justify-center gap-2"
+					>
+						<Button href="/account/api-keys#{provider}" class="w-fit">Add API Key</Button>
+					</div>
+				{/if}
+			</div>
 		</div>
-	</div>
-{/if}
+	{/if}
+{/each}

@@ -2,42 +2,65 @@
 	import { Provider, type ProviderMeta } from '$lib/types';
 	import ProviderCard from './provider-card.svelte';
 
-	const allProviders = Object.values(Provider);
+	const displayProviders = [
+		Provider.OpenRouter,
+		Provider.OpenAI,
+		Provider.Anthropic,
+		Provider.Google,
+		Provider.Perplexity,
+		Provider.xAI,
+		Provider.DeepSeek,
+		Provider.Mistral,
+	];
 
-	const providersMeta: Record<Provider, ProviderMeta> = {
+	const providersMeta: Record<string, ProviderMeta> = {
 		[Provider.OpenRouter]: {
 			title: 'OpenRouter',
 			link: 'https://openrouter.ai/settings/keys',
-			description: 'API Key for OpenRouter.',
-			models: ['a shit ton'],
+			description: 'Access to 400+ models from all providers through a single key.',
 			placeholder: 'sk-or-...',
-		},
-		[Provider.HuggingFace]: {
-			title: 'HuggingFace',
-			link: 'https://huggingface.co/settings/tokens',
-			description: 'API Key for HuggingFace, for open-source models.',
-			placeholder: 'hf_...',
 		},
 		[Provider.OpenAI]: {
 			title: 'OpenAI',
-			link: 'https://platform.openai.com/account/api-keys',
-			description: 'API Key for OpenAI.',
-			models: ['gpt-3.5-turbo', 'gpt-4'],
+			link: 'https://platform.openai.com/api-keys',
+			description: 'Direct access to GPT-4.1, o3, o4-mini and more.',
 			placeholder: 'sk-...',
 		},
 		[Provider.Anthropic]: {
 			title: 'Anthropic',
-			link: 'https://console.anthropic.com/account/api-keys',
-			description: 'API Key for Anthropic.',
-			models: [
-				'Claude 3.5 Sonnet',
-				'Claude 3.7 Sonnet',
-				'Claude 3.7 Sonnet (Reasoning)',
-				'Claude 4 Opus',
-				'Claude 4 Sonnet',
-				'Claude 4 Sonnet (Reasoning)',
-			],
+			link: 'https://console.anthropic.com/settings/keys',
+			description: 'Direct access to Claude Opus 4, Sonnet 4, Haiku 3.5.',
 			placeholder: 'sk-ant-...',
+		},
+		[Provider.Google]: {
+			title: 'Google AI',
+			link: 'https://aistudio.google.com/app/apikey',
+			description: 'Direct access to Gemini 2.5 Pro, Flash and more.',
+			placeholder: 'AI...',
+		},
+		[Provider.Perplexity]: {
+			title: 'Perplexity',
+			link: 'https://www.perplexity.ai/settings/api',
+			description: 'Sonar models with built-in web search.',
+			placeholder: 'pplx-...',
+		},
+		[Provider.xAI]: {
+			title: 'xAI',
+			link: 'https://console.x.ai/',
+			description: 'Direct access to Grok 3 and Grok 3 Mini.',
+			placeholder: 'xai-...',
+		},
+		[Provider.DeepSeek]: {
+			title: 'DeepSeek',
+			link: 'https://platform.deepseek.com/api_keys',
+			description: 'Direct access to DeepSeek V3 and R1.',
+			placeholder: 'sk-...',
+		},
+		[Provider.Mistral]: {
+			title: 'Mistral',
+			link: 'https://console.mistral.ai/api-keys/',
+			description: 'Direct access to Mistral Large, Small, and Codestral.',
+			placeholder: '',
 		},
 	};
 </script>
@@ -55,10 +78,9 @@
 </div>
 
 <div class="mt-8 flex flex-col gap-4">
-	{#each allProviders as provider (provider)}
-		<!-- only do OpenRouter for now -->
-		{#if provider === Provider.OpenRouter}
-			{@const meta = providersMeta[provider]}
+	{#each displayProviders as provider (provider)}
+		{@const meta = providersMeta[provider]}
+		{#if meta}
 			<ProviderCard {provider} {meta} />
 		{/if}
 	{/each}
